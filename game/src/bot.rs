@@ -34,9 +34,10 @@ pub struct Bot {
     ground_probe_distance: InheritableVariable<f32>,
     ground_probe_timeout: f32,
     target: Handle<Node>,
+    target_timeout: f32,
+
     animations: Vec<SpriteSheetAnimation>,
     current_animation: InheritableVariable<u32>,
-    target_timeout: f32,
 }
 
 impl Bot {
@@ -194,7 +195,10 @@ impl ScriptTrait for Bot {
     fn on_update(&mut self, context: &mut ScriptContext) {
         self.search_target(context);
         self.do_move(context);
-        if self.has_obstacles(context) {
+
+        let has_obstacles = self.has_obstacles(context);
+
+        if has_obstacles {
             self.direction = -self.direction;
         }
 
@@ -219,28 +223,32 @@ impl ScriptTrait for Bot {
             }
         }
 
-        eprintln!(
-            "{} {} {:?}",
-            self.animations.len(),
-            *self.current_animation,
-            self.animations.get_mut(*self.current_animation as usize)
-        );
+        if *self.speed != 0.0 {
+            self.current_animation.set_value_and_mark_modified(2);
+        }
+
+        if self.target.is_some() {
+            let target_position = context.scene.graph[self.target].global_position();
+            let self_position = context.scene.graph[context.handle].global_position();
+            if target_position.metric_distance(&self_position) < 1.1 {
+                self.current_animation.set_value_and_mark_modified(0);
+            } else if has_obstacles {
+                self.current_animation.set_value_and_mark_modified(3);
+            }
+        }
+
         if let Some(current_animation) = self.animations.get_mut(*self.current_animation as usize) {
-            eprintln!("a");
             current_animation.update(context.dt);
 
             if let Some(sprite) = context
                 .scene
                 .graph
-                .try_get_mut(*self.rectangle)
-                .and_then(|n| n.cast_mut::<Rectangle>())
+                .try_get_mut_of_type::<Rectangle>(*self.rectangle)
             {
-                eprintln!("b");
                 // Set new frame to the sprite.
                 sprite
                     .material()
                     .data_ref()
-                    // .set_property("diffuseTexture", current_animation.texture())
                     .set_texture(&"diffuseTexture".into(), current_animation.texture())
                     .unwrap();
                 sprite.set_uv_rect(
@@ -252,4 +260,3 @@ impl ScriptTrait for Bot {
         }
     }
 }
-
