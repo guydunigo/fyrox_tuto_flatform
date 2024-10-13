@@ -28,6 +28,7 @@ pub struct Bot {
     rectangle: InheritableVariable<Handle<Node>>,
     speed: InheritableVariable<f32>,
     direction: f32,
+    direction_change_timeout: f32,
     front_obstacle_sensor: InheritableVariable<Handle<Node>>,
     back_obstacle_sensor: InheritableVariable<Handle<Node>>,
     ground_probe: InheritableVariable<Handle<Node>>,
@@ -41,18 +42,19 @@ pub struct Bot {
 }
 
 impl Bot {
-    fn do_move(&mut self, ctx: &mut ScriptContext) {
+    fn do_move(&mut self, ctx: &mut ScriptContext) -> f32 {
         let Some(rigid_body) = ctx.scene.graph.try_get_mut_of_type::<RigidBody>(ctx.handle) else {
-            return;
+            return 0.;
         };
 
+        let actual_vel_x = rigid_body.lin_vel().x;
         let y_vel = rigid_body.lin_vel().y;
 
         rigid_body.set_lin_vel(Vector2::new(-*self.speed * self.direction, y_vel));
 
         // Also, inverse the sprite along the X axis.
         let Some(rectangle) = ctx.scene.graph.try_get_mut(*self.rectangle) else {
-            return;
+            return actual_vel_x;
         };
 
         rectangle.local_transform_mut().set_scale(Vector3::new(
@@ -60,6 +62,8 @@ impl Bot {
             2.0,
             1.0,
         ));
+
+        actual_vel_x
     }
 
     fn has_obstacles(&mut self, ctx: &mut ScriptContext) -> bool {
@@ -194,12 +198,13 @@ impl ScriptTrait for Bot {
 
     fn on_update(&mut self, context: &mut ScriptContext) {
         self.search_target(context);
-        self.do_move(context);
+        let actual_vel_x = self.do_move(context).abs();
 
-        let has_obstacles = self.has_obstacles(context);
-
-        if has_obstacles {
+        self.direction_change_timeout -= context.dt;
+        if self.has_obstacles(context) || (self.direction_change_timeout < 0. && actual_vel_x < 1.)
+        {
             self.direction = -self.direction;
+            self.direction_change_timeout = 0.2;
         }
 
         self.ground_probe_timeout -= context.dt;
@@ -232,7 +237,7 @@ impl ScriptTrait for Bot {
             let self_position = context.scene.graph[context.handle].global_position();
             if target_position.metric_distance(&self_position) < 1.1 {
                 self.current_animation.set_value_and_mark_modified(0);
-            } else if has_obstacles {
+            } else if actual_vel_x < 1. {
                 self.current_animation.set_value_and_mark_modified(3);
             }
         }
