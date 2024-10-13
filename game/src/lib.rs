@@ -1,5 +1,6 @@
 //! Game project.
-// use crate::bot::Bot;
+pub mod bot;
+use crate::bot::Bot;
 use fyrox::{
     core::{
         algebra::{Vector2, Vector3},
@@ -28,6 +29,7 @@ pub use fyrox;
 #[derive(Default, Visit, Reflect, Debug)]
 pub struct Game {
     scene: Handle<Scene>,
+    player: Handle<Node>,
 }
 
 impl Plugin for Game {
@@ -35,6 +37,7 @@ impl Plugin for Game {
         // Register your scripts here.
         let script_constructors = &context.serialization_context.script_constructors;
         script_constructors.add::<Player>("Player");
+        script_constructors.add::<Bot>("Bot");
     }
 
     fn init(&mut self, scene_path: Option<&str>, context: PluginContext) {
@@ -106,7 +109,9 @@ impl ScriptTrait for Player {
     fn on_init(&mut self, _context: &mut ScriptContext) {}
 
     // Put start logic - it is called when every other script is already initialized.
-    fn on_start(&mut self, _context: &mut ScriptContext) {}
+    fn on_start(&mut self, context: &mut ScriptContext) {
+        context.plugins.get_mut::<Game>().player = context.handle;
+    }
 
     // Called whenever there is an event from OS (mouse click, keypress, etc.)
     fn on_os_event(&mut self, event: &Event<()>, _context: &mut ScriptContext) {
@@ -170,6 +175,7 @@ impl ScriptTrait for Player {
                 }
             }
         }
+
         if let Some(current_animation) = self.animations.get_mut(self.current_animation as usize) {
             current_animation.update(context.dt);
 
@@ -183,6 +189,7 @@ impl ScriptTrait for Player {
                 sprite
                     .material()
                     .data_ref()
+                    // .set_property("diffuseTexture", current_animation.texture())
                     .set_texture(&"diffuseTexture".into(), current_animation.texture())
                     .unwrap();
                 sprite.set_uv_rect(
